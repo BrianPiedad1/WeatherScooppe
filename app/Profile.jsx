@@ -1,387 +1,320 @@
-import { Stack } from "expo-router";
-import React, { useState, useEffect } from "react";
-import {
-  View,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  StyleSheet,
-  Alert,
-  Image,
-  ScrollView,
-} from "react-native";
-import { useRouter } from "expo-router";
-import { auth, db } from "../firebaseConfig";
-import {
-  updateProfile,
-  updateEmail,
-  updatePassword,
-  deleteUser,
-} from "firebase/auth";
-import { doc, getDoc, setDoc } from "firebase/firestore";
-import * as ImagePicker from "expo-image-picker";
+  import { Stack } from "expo-router";
+  import React, { useState, useEffect } from "react";
+  import {
+    View,
+    Text,
+    TextInput,
+    TouchableOpacity,
+    StyleSheet,
+    Image,
+    ScrollView,
+    ActivityIndicator,
+  } from "react-native";
+  import { useRouter } from "expo-router";
+  import { auth, db, storage } from "../firebaseConfig";
+  import { updateProfile, updateEmail } from "firebase/auth";
+  import { doc, getDoc, setDoc } from "firebase/firestore";
+  import * as ImagePicker from "expo-image-picker";
+  import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
+  import { Ionicons } from "@expo/vector-icons";
+  import Toast from "react-native-toast-message";
+  import { useTheme } from "./context/ThemeContext";
+  import { useLanguage } from "./context/LanguageContext";
 
-export default function Profile() {
-  const router = useRouter();
-  const user = auth.currentUser;
+  export default function Profile() {
+    const router = useRouter();
+    const user = auth.currentUser;
 
-  const [name, setName] = useState("");
-  const [email, setEmail] = useState("");
-  const [photo, setPhoto] = useState(null);
+    const { darkTheme } = useTheme();
+    const { language, translations } = useLanguage();
+    const t = translations[language];
 
-  // Extra fields
-  const [bio, setBio] = useState("");
-  const [phone, setPhone] = useState("");
-  const [birthday, setBirthday] = useState("");
-  const [gender, setGender] = useState("");
-  const [newPassword, setNewPassword] = useState("");
-  const [confirmPassword, setConfirmPassword] = useState("");
+    const [name, setName] = useState("");
+    const [email, setEmail] = useState("");
+    const [photo, setPhoto] = useState(null);
+    const [bio, setBio] = useState("");
+    const [phone, setPhone] = useState("");
+    const [birthday, setBirthday] = useState("");
+    const [gender, setGender] = useState("");
+    const [saving, setSaving] = useState(false);
 
-  // Show / Hide toggles
-  const [showNewPass, setShowNewPass] = useState(false);
-  const [showConfirmPass, setShowConfirmPass] = useState(false);
+    // 🧠 Load user info
+    useEffect(() => {
+      const fetchUserData = async () => {
+        if (user) {
+          setName(user.displayName || "");
+          setEmail(user.email || "");
+          setPhoto(user.photoURL || null);
 
-  // 🌐 Language (default English)
-  const [language, setLanguage] = useState("English");
-
-  // Load user info
-  useEffect(() => {
-    const fetchUserData = async () => {
-      if (user) {
-        setName(user.displayName || "");
-        setEmail(user.email || "");
-        setPhoto(user.photoURL || null);
-
-        try {
-          const userDoc = await getDoc(doc(db, "users", user.uid));
-          if (userDoc.exists()) {
-            const data = userDoc.data();
-            setBio(data.bio || "");
-            setPhone(data.phone || "");
-            setBirthday(data.birthday || "");
-            setGender(data.gender || "");
-            setLanguage(data.language || "English");
+          try {
+            const userDoc = await getDoc(doc(db, "users", user.uid));
+            if (userDoc.exists()) {
+              const data = userDoc.data();
+              setBio(data.bio || "");
+              setPhone(data.phone || "");
+              setBirthday(data.birthday || "");
+              setGender(data.gender || "");
+            }
+          } catch (error) {
+            console.log("Firestore fetch error:", error.message);
           }
-        } catch (error) {
-          console.log("Firestore fetch error:", error.message);
         }
+      };
+      fetchUserData();
+    }, [user]);
+
+    // 🖼 Pick image
+    const pickImage = async () => {
+      try {
+        const result = await ImagePicker.launchImageLibraryAsync({
+          mediaTypes: ImagePicker.MediaTypeOptions.Images,
+          allowsEditing: true,
+          aspect: [1, 1],
+          quality: 0.8,
+        });
+        if (!result.canceled) {
+          setPhoto(result.assets[0].uri);
+        }
+      } catch (error) {
+        console.log("Image pick error:", error);
+        Toast.show({
+          type: "error",
+          text1: "Error picking image",
+        });
       }
     };
 
-    fetchUserData();
-  }, [user]);
+    // ☁️ Upload photo to Firebase Storage
+    const uploadPhotoAsync = async (uri) => {
+      if (!uri) return null;
 
-  // Pick image from gallery
-  const pickImage = async () => {
-    try {
-      let result = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: ImagePicker.MediaTypeOptions.Images,
-        allowsEditing: true,
-        aspect: [1, 1],
-        quality: 0.7,
-      });
-
-      if (!result.canceled) {
-        setPhoto(result.assets[0].uri);
+      try {
+        const response = await fetch(uri);
+        const blob = await response.blob();
+        const storageRef = ref(storage, `profilePhotos/${user.uid}.jpg`);
+        await uploadBytes(storageRef, blob);
+        const downloadURL = await getDownloadURL(storageRef);
+        return downloadURL;
+      } catch (error) {
+        console.log("Upload error:", error);
+        Toast.show({ type: "error", text1: "Upload failed" });
+        return null;
       }
-    } catch (err) {
-      console.log("Image pick error:", err);
-      Alert.alert("❌ Error", "Could not pick image");
-    }
-  };
+    };
 
-  // Save profile
-  const handleSave = async () => {
-    try {
-      if (!user) return;
-
-      await updateProfile(user, {
-        displayName: name,
-        photoURL: photo,
-      });
-
-      if (email !== user.email) {
-        await updateEmail(user, email);
+    // 💾 Save all profile changes
+    const handleSave = async () => {
+      if (!user) {
+        Toast.show({ type: "error", text1: "No user logged in" });
+        return;
       }
 
-      await setDoc(
-        doc(db, "users", user.uid),
-        { bio, phone, birthday, gender, language },
-        { merge: true }
-      );
+      setSaving(true);
 
-      Alert.alert("✅ Saved", "Your profile has been updated!");
-    } catch (error) {
-      console.log("Save error:", error);
-      Alert.alert("❌ Error", error.message);
-    }
-  };
+      try {
+        let photoURL = user.photoURL;
 
-  // Change password
-  const handleChangePassword = async () => {
-    if (!user) return;
-    if (!newPassword || !confirmPassword) {
-      Alert.alert("⚠️ Error", "Please fill both password fields");
-      return;
-    }
-    if (newPassword !== confirmPassword) {
-      Alert.alert("⚠️ Error", "Passwords do not match");
-      return;
-    }
-    try {
-      await updatePassword(user, newPassword);
-      Alert.alert("✅ Success", "Password updated!");
-      setNewPassword("");
-      setConfirmPassword("");
-      setShowNewPass(false);
-      setShowConfirmPass(false);
-    } catch (error) {
-      console.log("Password change error:", error);
-      Alert.alert("❌ Error", error.message);
-    }
-  };
+        // Upload image if a new one was selected
+        if (photo && !photo.startsWith("https://")) {
+          photoURL = await uploadPhotoAsync(photo);
+        }
 
-  // Delete account
-  const handleDeleteAccount = async () => {
-    Alert.alert("⚠️ Confirm", "Are you sure you want to delete your account?", [
-      { text: "Cancel", style: "cancel" },
-      {
-        text: "Delete",
-        style: "destructive",
-        onPress: async () => {
-          try {
-            await deleteUser(user);
-            Alert.alert("✅ Account deleted");
-            router.replace("/Signup");
-          } catch (error) {
-            console.log("Delete user error:", error);
-            Alert.alert("❌ Error", error.message);
-          }
-        },
-      },
-    ]);
-  };
+        // Update Firebase Auth
+        await updateProfile(user, { displayName: name, photoURL });
+        if (email && email !== user.email) {
+          await updateEmail(user, email);
+        }
 
-  return (
-    <>
-      <Stack.Screen options={{ headerShown: false }} />
+        // Save to Firestore
+        await setDoc(
+          doc(db, "users", user.uid),
+          { name, email, bio, phone, birthday, gender, photoURL },
+          { merge: true }
+        );
 
-      <View style={styles.container}>
-        <ScrollView contentContainerStyle={{ paddingBottom: 40 }}>
-          {/* ✅ Back icon only (no full header) */}
-          <TouchableOpacity style={styles.backBtn} onPress={() => router.back()}>
-            <Text style={styles.backText}>←</Text>
-          </TouchableOpacity>
+        Toast.show({
+          type: "success",
+          text1: "Profile updated successfully 🎉",
+        });
 
-          <View style={styles.card}>
-            {/* Profile Picture */}
-            <TouchableOpacity onPress={pickImage} style={styles.avatarWrapper}>
-              {photo ? (
-                <Image source={{ uri: photo }} style={styles.avatar} />
-              ) : (
-                <View style={styles.avatarPlaceholder}>
-                  <Text style={styles.avatarText}>+</Text>
-                </View>
-              )}
-            </TouchableOpacity>
-            <Text style={styles.smallText}>Tap to change photo</Text>
+        setSaving(false);
+        router.push("/Home");
+      } catch (error) {
+        console.log("Save error:", error);
+        Toast.show({
+          type: "error",
+          text1: "Save failed",
+          text2: error.message,
+        });
+        setSaving(false);
+      }
+    };
 
-            {/* Name */}
-            <Text style={styles.label}>Full Name</Text>
-            <TextInput
-              style={styles.input}
-              value={name}
-              onChangeText={setName}
-              placeholder="Full Name"
-            />
-
-            {/* Email */}
-            <Text style={styles.label}>Email</Text>
-            <TextInput
-              style={styles.input}
-              value={email}
-              onChangeText={setEmail}
-              keyboardType="email-address"
-              placeholder="Email"
-            />
-
-            {/* Bio */}
-            <Text style={styles.label}>Bio</Text>
-            <TextInput
-              style={[styles.input, { height: 80, textAlignVertical: "top" }]}
-              value={bio}
-              onChangeText={setBio}
-              placeholder="Bio"
-              multiline
-            />
-
-            {/* Phone */}
-            <Text style={styles.label}>Phone Number</Text>
-            <TextInput
-              style={styles.input}
-              value={phone}
-              onChangeText={setPhone}
-              keyboardType="phone-pad"
-              placeholder="Phone"
-            />
-
-            {/* Birthday */}
-            <Text style={styles.label}>Birthday</Text>
-            <TextInput
-              style={styles.input}
-              value={birthday}
-              onChangeText={setBirthday}
-              placeholder="YYYY-MM-DD"
-            />
-
-            {/* Gender */}
-            <Text style={styles.label}>Gender</Text>
-            <TextInput
-              style={styles.input}
-              value={gender}
-              onChangeText={setGender}
-              placeholder="Gender"
-            />
-
-            {/* Save button */}
-            <TouchableOpacity
-              style={[styles.saveBtn, styles.fullInput]}
-              onPress={handleSave}
-            >
-              <Text style={styles.saveText}>💾 Save Changes</Text>
-            </TouchableOpacity>
-
-            {/* Change Password */}
-            <Text style={[styles.label, { marginTop: 20 }]}>New Password</Text>
-            <View style={[styles.passwordWrapper, styles.fullInput]}>
-              <TextInput
-                style={styles.passwordInput}
-                value={newPassword}
-                onChangeText={setNewPassword}
-                secureTextEntry={!showNewPass}
-                placeholder="New Password"
+    return (
+      <>
+        <Stack.Screen options={{ headerShown: false }} />
+        <View
+          style={[
+            styles.container,
+            { backgroundColor: darkTheme ? "#121212" : "#EAF6FF" },
+          ]}
+        >
+          <ScrollView contentContainerStyle={{ paddingBottom: 40 }}>
+            {/* 🔙 Back button */}
+            <TouchableOpacity style={styles.backBtn} onPress={() => router.back()}>
+              <Ionicons
+                name="arrow-back-outline"
+                size={26}
+                color={darkTheme ? "#fff" : "#05080aff"}
               />
-              <TouchableOpacity
-                onPress={() => setShowNewPass((s) => !s)}
-                style={styles.eyeBtn}
-              >
-                <Text style={styles.eye}>{showNewPass ? "🙈" : "👁️"}</Text>
-              </TouchableOpacity>
-            </View>
-
-            <Text style={styles.label}>Confirm Password</Text>
-            <View style={[styles.passwordWrapper, styles.fullInput]}>
-              <TextInput
-                style={styles.passwordInput}
-                value={confirmPassword}
-                onChangeText={setConfirmPassword}
-                secureTextEntry={!showConfirmPass}
-                placeholder="Confirm Password"
-              />
-              <TouchableOpacity
-                onPress={() => setShowConfirmPass((s) => !s)}
-                style={styles.eyeBtn}
-              >
-                <Text style={styles.eye}>
-                  {showConfirmPass ? "🙈" : "👁️"}
-                </Text>
-              </TouchableOpacity>
-            </View>
-
-            <TouchableOpacity
-              style={[styles.saveBtn, styles.fullInput]}
-              onPress={handleChangePassword}
-            >
-              <Text style={styles.saveText}>🔑 Change Password</Text>
             </TouchableOpacity>
 
-            {/* Delete Account */}
-            <TouchableOpacity
+            <View
               style={[
-                styles.saveBtn,
-                styles.fullInput,
-                { backgroundColor: "#B00020" },
+                styles.card,
+                { backgroundColor: darkTheme ? "#1E1E1E" : "#4282a0ff"},
               ]}
-              onPress={handleDeleteAccount}
             >
-              <Text style={styles.saveText}>🗑 Delete Account</Text>
-            </TouchableOpacity>
-          </View>
-        </ScrollView>
-      </View>
-    </>
-  );
-}
+              {/* 🖼 Profile Picture */}
+              <View style={styles.avatarContainer}>
+                <Image
+                  source={{
+                    uri:
+                      photo ||
+                      "https://cdn-icons-png.flaticon.com/512/847/847969.png",
+                  }}
+                  style={styles.avatar}
+                />
+                <TouchableOpacity
+                  style={styles.cameraButton}
+                  onPress={pickImage}
+                >
+                  <Ionicons name="camera-outline" size={20} color="#fff" />
+                </TouchableOpacity>
+              </View>
 
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: "#EAF6FF" },
-  backBtn: { margin: 15, alignSelf: "flex-start" },
-  backText: { fontSize: 22, color: "#00509E", fontWeight: "bold" },
-  card: {
-    backgroundColor: "#fff",
-    margin: 20,
-    padding: 20,
-    borderRadius: 15,
-    shadowColor: "#000",
-    shadowOpacity: 0.1,
-    shadowRadius: 6,
-    elevation: 4,
-    alignItems: "center",
-  },
-  avatarWrapper: { marginBottom: 10 },
-  avatar: { width: 100, height: 100, borderRadius: 50 },
-  avatarPlaceholder: {
-    width: 100,
-    height: 100,
-    borderRadius: 50,
-    backgroundColor: "#ddd",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  avatarText: { fontSize: 32, color: "#555" },
-  smallText: { fontSize: 12, color: "#777", marginBottom: 20 },
-  label: {
-    fontSize: 16,
-    fontWeight: "bold",
-    marginBottom: 6,
-    color: "#00509E",
-    alignSelf: "flex-start",
-  },
-  input: {
-    borderWidth: 1,
-    borderColor: "#ccc",
-    borderRadius: 10,
-    padding: 12,
-    marginBottom: 15,
-    fontSize: 16,
-    backgroundColor: "#F9F9F9",
-    width: "100%",
-  },
-  passwordWrapper: {
-    flexDirection: "row",
-    alignItems: "center",
-    borderWidth: 1,
-    borderColor: "#ccc",
-    borderRadius: 10,
-    paddingHorizontal: 8,
-    marginBottom: 15,
-    backgroundColor: "#F9F9F9",
-  },
-  passwordInput: {
-    flex: 1,
-    paddingVertical: 12,
-    paddingHorizontal: 6,
-    fontSize: 16,
-  },
-  eyeBtn: { padding: 8 },
-  eye: { fontSize: 18 },
-  saveBtn: {
-    backgroundColor: "#00A6FB",
-    padding: 15,
-    borderRadius: 10,
-    alignItems: "center",
-    marginTop: 10,
-  },
-  saveText: { color: "#fff", fontSize: 16, fontWeight: "bold" },
-  fullInput: { width: "100%" },
-});
+              {/* 👤 Inputs */}
+              <View style={{ width: "100%" }}>
+                <Text style={[styles.label, { color: darkTheme ? "#fff" : "#00509E" }]}>Full Name</Text>
+                <TextInput
+                  style={[styles.input, { backgroundColor: darkTheme ? "#2C2C2C" : "#F9F9F9", color: darkTheme ? "#fff" : "#000" }]}
+                  value={name}
+                  onChangeText={setName}
+                  placeholder="Enter your name"
+                />
+
+                <Text style={[styles.label, { color: darkTheme ? "#fff" : "#00509E" }]}>Email</Text>
+                <TextInput
+                  style={[styles.input, { backgroundColor: darkTheme ? "#2C2C2C" : "#F9F9F9", color: darkTheme ? "#fff" : "#000" }]}
+                  value={email}
+                  onChangeText={setEmail}
+                  placeholder="Enter email"
+                />
+
+                <Text style={[styles.label, { color: darkTheme ? "#fff" : "#00509E" }]}>Bio</Text>
+                <TextInput
+                  style={[styles.input, { height: 80, textAlignVertical: "top", backgroundColor: darkTheme ? "#2C2C2C" : "#F9F9F9", color: darkTheme ? "#fff" : "#000" }]}
+                  value={bio}
+                  onChangeText={setBio}
+                  multiline
+                  placeholder="Write something about yourself"
+                />
+
+                <Text style={[styles.label, { color: darkTheme ? "#fff" : "#00509E" }]}>Phone</Text>
+                <TextInput
+                  style={[styles.input, { backgroundColor: darkTheme ? "#2C2C2C" : "#F9F9F9", color: darkTheme ? "#fff" : "#000" }]}
+                  value={phone}
+                  onChangeText={setPhone}
+                  placeholder="Phone number"
+                />
+
+                <Text style={[styles.label, { color: darkTheme ? "#fff" : "#00509E" }]}>Birthday</Text>
+                <TextInput
+                  style={[styles.input, { backgroundColor: darkTheme ? "#2C2C2C" : "#F9F9F9", color: darkTheme ? "#fff" : "#000" }]}
+                  value={birthday}
+                  onChangeText={setBirthday}
+                  placeholder="YYYY-MM-DD"
+                />
+
+                <Text style={[styles.label, { color: darkTheme ? "#fff" : "#00509E" }]}>Gender</Text>
+                <TextInput
+                  style={[styles.input, { backgroundColor: darkTheme ? "#2C2C2C" : "#F9F9F9", color: darkTheme ? "#fff" : "#000" }]}
+                  value={gender}
+                  onChangeText={setGender}
+                  placeholder="Enter gender"
+                />
+
+                {/* 💾 Save Button */}
+                <TouchableOpacity
+                  style={[styles.saveBtn, styles.fullInput]}
+                  onPress={handleSave}
+                  disabled={saving}
+                >
+                  {saving ? (
+                    <ActivityIndicator color="#fff" />
+                  ) : (
+                    <Text style={styles.saveText}>💾 Save Changes</Text>
+                  )}
+                </TouchableOpacity>
+              </View>
+            </View>
+          </ScrollView>
+        </View>
+        <Toast />
+      </>
+    );
+  }
+
+  const styles = StyleSheet.create({
+    container: { flex: 1 },
+    backBtn: { margin: 15, alignSelf: "flex-start" },
+    card: {
+      margin: 20,
+      padding: 20,
+      borderRadius: 15,
+      shadowColor: "#000",
+      shadowOpacity: 0.1,
+      shadowRadius: 6,
+      elevation: 4,
+      alignItems: "center",
+    },
+    avatarContainer: { position: "relative", marginBottom: 10 },
+    avatar: {
+      width: 110,
+      height: 110,
+      borderRadius: 55,
+      backgroundColor: "#00509E",
+    },
+    cameraButton: {
+      position: "absolute",
+      bottom: 0,
+      right: 0,
+      backgroundColor: "#050607ff",
+      borderRadius: 20,
+      width: 38,
+      height: 38,
+      alignItems: "center",
+      justifyContent: "center",
+      borderWidth: 2,
+      borderColor: "#fff",
+    },
+    input: {
+      borderWidth: 1,
+      borderColor: "#ccc",
+      borderRadius: 10,
+      padding: 12,
+      marginBottom: 15,
+      fontSize: 16,
+      width: "100%",
+    },
+    label: { fontSize: 16, fontWeight: "bold", marginBottom: 6 },
+    saveBtn: {
+      backgroundColor: "#00A6FB",
+      padding: 15,
+      borderRadius: 10,
+      alignItems: "center",
+      marginTop: 10,
+    },
+    saveText: { color: "#fff", fontSize: 16, fontWeight: "bold" },
+    fullInput: { width: "100%" },
+  });

@@ -1,116 +1,105 @@
-import React, { useState, useEffect } from "react";
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity } from "react-native";
-import { useRouter } from "expo-router";
+import { Stack, useRouter } from "expo-router";
+import React, { useState } from "react";
+import {
+  View,
+  Text,
+  StyleSheet,
+  TouchableOpacity,
+  ScrollView,
+} from "react-native";
+import { useTheme } from "./context/ThemeContext";
+import { useLanguage } from "./context/LanguageContext";
 
 export default function Terms() {
   const router = useRouter();
-  const [scrolledToEnd, setScrolledToEnd] = useState(false);
+  const [agreed, setAgreed] = useState(false);
 
-  // ✅ If content is short, unlock Agree automatically
-  useEffect(() => {
-    setTimeout(() => {
-      setScrolledToEnd(true);
-    }, 500);
-  }, []);
-
-  const handleScroll = (event) => {
-    const { layoutMeasurement, contentOffset, contentSize } = event.nativeEvent;
-    const isBottom =
-      layoutMeasurement.height + contentOffset.y >= contentSize.height - 20;
-    if (isBottom) setScrolledToEnd(true);
-  };
+  const { darkTheme } = useTheme();
+  const { language, translations } = useLanguage();
+  const t = translations[language];
 
   return (
-    <View style={styles.container}>
-      {/* Header */}
-      <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()}>
-          <Text style={styles.backText}>←</Text>
-        </TouchableOpacity>
-        <Text style={styles.headerTitle}>📜 Terms & Conditions</Text>
-        <View style={{ width: 30 }} />
-      </View>
-
-      {/* Content */}
-      <ScrollView
-        style={styles.scroll}
-        contentContainerStyle={styles.content}
-        onScroll={handleScroll}
-        scrollEventThrottle={16}
+    <>
+      <Stack.Screen options={{ headerShown: false }} />
+      <View
+        style={[
+          styles.container,
+          { backgroundColor: darkTheme ? "#121212" : "#EAF6FF" },
+        ]}
       >
-        <Text style={styles.text}>
-          Welcome to WeatherScooppe! By creating an account, you agree to the
-          following Terms & Conditions:
+        <Text style={[styles.title, { color: darkTheme ? "#fff" : "#00509E" }]}>
+          {t.termsTitle}
         </Text>
 
-        <Text style={styles.text}>
-          1. You will use this app responsibly and not misuse the service.{"\n"}
-          2. We do not guarantee 100% accurate weather information.{"\n"}
-          3. Your account is your responsibility — keep your login safe.{"\n"}
-          4. We may update these terms from time to time.{"\n"}
-          5. By continuing, you agree to follow these rules.{"\n"}
-        </Text>
+        <ScrollView style={styles.scrollBox}>
+          {/* App Definition */}
+          <Text
+            style={{
+              color: darkTheme ? "#fff" : "#333",
+              fontSize: 16,
+              marginBottom: 15,
+            }}
+          >
+            🌦️ <Text style={{ fontWeight: "bold" }}>WeatherScooppe</Text> is a
+            mobile application that provides real-time weather forecasts,
+            temperature updates, and personalized weather information. It is
+            designed for students and general users to easily check accurate
+            weather data in their city or any place around the world.
+          </Text>
 
-        <Text style={styles.text}>
-          Thank you for using WeatherScooppe 🌦 — enjoy checking your weather!
-        </Text>
-      </ScrollView>
+          {/* Terms Content (Custom Sentence) */}
+          <Text style={{ color: darkTheme ? "#fff" : "#333", fontSize: 16 }}>
+            By using WeatherScooppe, you agree to use the app responsibly and
+            only for personal, non-commercial purposes. Weather data is provided
+            by third-party services and may not always be 100% accurate. We are
+            not liable for any decisions made based on the information provided
+            in the app. Users must not attempt to misuse, copy, or distribute
+            the app without permission. Continued use of the app means you
+            accept these Terms and Conditions.
+          </Text>
+        </ScrollView>
 
-      {/* Footer Buttons */}
-      <View style={styles.footer}>
-        <TouchableOpacity
-          style={[styles.footerBtn, { backgroundColor: "#999" }]}
-          onPress={() => router.push("/Signup")}
-        >
-          <Text style={styles.footerText}>Disagree</Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          style={[
-            styles.footerBtn,
-            !scrolledToEnd && { backgroundColor: "#ccc" },
-          ]}
-          disabled={!scrolledToEnd}
-          onPress={() =>
-            router.push({ pathname: "/Signup", params: { agreed: "true" } })
-          }
-        >
-          <Text style={styles.footerText}>I Agree</Text>
-        </TouchableOpacity>
+        <View style={styles.buttonRow}>
+          <TouchableOpacity
+            style={[styles.button, { backgroundColor: "#ccc" }]}
+            onPress={() => router.back()}
+          >
+            <Text style={styles.buttonText}>{t.disagree}</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.button, { backgroundColor: "#00A6FB" }]}
+            onPress={() => {
+              setAgreed(true);
+              router.replace({ pathname: "/Signup", params: { agreed: true } });
+            }}
+          >
+            <Text style={[styles.buttonText, { color: "#fff" }]}>
+              {t.agree}
+            </Text>
+          </TouchableOpacity>
+        </View>
       </View>
-    </View>
+    </>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: "#EAF6FF" },
-  header: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    paddingVertical: 15,
-    paddingHorizontal: 20,
-    backgroundColor: "#00A6FB",
-    elevation: 5,
-  },
-  backText: { fontSize: 22, color: "#fff", fontWeight: "bold" },
-  headerTitle: { fontSize: 18, fontWeight: "bold", color: "#fff" },
-  scroll: { flex: 1 },
-  content: { padding: 20 },
-  text: {
-    fontSize: 16,
-    color: "#333",
-    marginBottom: 15,
-    lineHeight: 22,
-  },
-  footer: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-  },
-  footerBtn: {
+  container: { flex: 1, padding: 20 },
+  title: { fontSize: 28, fontWeight: "bold", marginBottom: 20 },
+  scrollBox: {
     flex: 1,
+    backgroundColor: "rgba(255,255,255,0.2)",
     padding: 15,
+    borderRadius: 10,
+    marginBottom: 20,
+  },
+  buttonRow: { flexDirection: "row", justifyContent: "space-between" },
+  button: {
+    flex: 1,
+    padding: 14,
+    borderRadius: 10,
+    marginHorizontal: 5,
     alignItems: "center",
   },
-  footerText: { color: "#0a0909ff", fontSize: 16, fontWeight: "bold" },
+  buttonText: { fontWeight: "bold", fontSize: 16 },
 });

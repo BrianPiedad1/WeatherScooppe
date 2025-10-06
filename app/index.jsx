@@ -112,7 +112,7 @@ const styles = StyleSheet.create({
   },
   card: {
     backgroundColor: "rgba(205, 247, 22, 0.95)",
-    padding: 25,
+    padding: 40,
     width: "90%",
     borderRadius: 20,
     shadowColor: "#000",
@@ -120,7 +120,7 @@ const styles = StyleSheet.create({
     shadowRadius: 10,
     elevation: 6,
   },
-  title: { fontSize: 24, fontWeight: "bold", color: "#00509E", marginBottom: 5 },
+  title: { fontSize: 40, fontWeight: "bold", color: "#00509E", marginBottom: 5 },
   subtitle: { color: "#555", marginBottom: 20 },
   input: {
     backgroundColor: "#F1F5F9",

@@ -1,71 +1,57 @@
 import React from "react";
-import { View, Text, StyleSheet, ActivityIndicator, Image } from "react-native";
+import { View, Text, StyleSheet, ActivityIndicator } from "react-native";
+import { useLanguage } from "../context/LanguageContext";
+import { useTheme } from "../context/ThemeContext";
 
 export default function WeatherResult({ weather, loading }) {
+  const { language, translations } = useLanguage();
+  const t = translations[language];
+  const { darkTheme } = useTheme();
+
   if (loading) {
-    return <ActivityIndicator size="large" color="#00A6FB" />;
+    return <ActivityIndicator size="large" color="#00A6FB" style={{ marginTop: 20 }} />;
   }
 
-  if (!weather) {
-    return null;
-  }
-
-  // OpenWeather icon URL
-  const iconUrl = `https://openweathermap.org/img/wn/${weather.weather[0].icon}@4x.png`;
+  if (!weather) return null;
 
   return (
-    <View style={styles.container}>
-      {/* Weather Icon */}
-      <Image source={{ uri: iconUrl }} style={styles.icon} />
-
-      {/* Weather Info */}
-      <Text style={styles.city}>{weather.name}</Text>
-      <Text style={styles.temp}>{Math.round(weather.main.temp)}°C</Text>
-      <Text style={styles.description}>
-        {weather.weather[0].description.charAt(0).toUpperCase() +
-          weather.weather[0].description.slice(1)}
+    <View
+      style={[
+        styles.card,
+        { backgroundColor: darkTheme ? "rgba(30,30,30,0.8)" : "rgba(255,255,255,0.8)" },
+      ]}
+    >
+      <Text style={[styles.city, { color: darkTheme ? "#fff" : "#333" }]}>
+        {weather.name}, {weather.sys.country}
       </Text>
-      <Text style={styles.details}>💨 {weather.wind.speed} m/s</Text>
-      <Text style={styles.details}>💧 {weather.main.humidity}% Humidity</Text>
+      <Text style={[styles.temp, { color: darkTheme ? "#fff" : "#333" }]}>
+        {t.temperature || "Temperature"}: {Math.round(weather.main.temp)}°C
+      </Text>
+      <Text style={[styles.detail, { color: darkTheme ? "#fff" : "#333" }]}>
+        {t.feelsLike || "Feels Like"}: {Math.round(weather.main.feels_like)}°C
+      </Text>
+      <Text style={[styles.detail, { color: darkTheme ? "#fff" : "#333" }]}>
+        {t.humidity || "Humidity"}: {weather.main.humidity}%
+      </Text>
+      <Text style={[styles.detail, { color: darkTheme ? "#fff" : "#333" }]}>
+        {t.conditions || "Conditions"}: {weather.weather[0].description}
+      </Text>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    backgroundColor: "rgba(255,255,255,0.9)",
-    borderRadius: 20,
-    padding: 20,
-    alignItems: "center",
+  card: {
+    marginTop: 40,
+    padding: 50,
+    borderRadius: 12,
     shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.2,
-    shadowRadius: 8,
-    elevation: 5,
-    marginTop: 20,
+    shadowRadius: 4,
+    elevation: 3,
   },
-  icon: {
-    width: 120,
-    height: 120,
-    marginBottom: 10,
-  },
-  city: {
-    fontSize: 28,
-    fontWeight: "bold",
-    color: "#00509E",
-  },
-  temp: {
-    fontSize: 40,
-    fontWeight: "bold",
-    color: "#333",
-  },
-  description: {
-    fontSize: 18,
-    fontStyle: "italic",
-    marginBottom: 10,
-    textTransform: "capitalize",
-  },
-  details: {
-    fontSize: 16,
-    color: "#555",
-  },
+  city: { fontSize: 24, fontWeight: "bold", marginBottom: 10 },
+  temp: { fontSize: 20, fontWeight: "600", marginBottom: 5 },
+  detail: { fontSize: 16, marginBottom: 3 },
 });
